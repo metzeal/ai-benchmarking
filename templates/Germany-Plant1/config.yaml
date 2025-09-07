@@ -1,0 +1,223 @@
+# Scoring configuration matching the Specs sheet criteria.
+# type: numeric | numeric_inverse | boolean | categorical
+# pick: max|min|avg (for numeric lists)
+Length (mm):
+  type: numeric
+  pick: max
+  weight: 1.0
+
+Capacity (mm):
+  type: numeric
+  pick: avg
+  weight: 2.0
+
+Max sheet bending length (mm):
+  type: numeric
+  pick: max
+  weight: 1.0
+
+Weight (ton):
+  type: numeric_inverse
+  pick: avg
+  weight: 1.5
+
+Footprints (LxHxB mm):
+  type: numeric
+  pick: max
+  weight: 0.5
+
+Control system:
+  type: categorical
+  mapping:
+    "Prolink or Easylink": 3
+    "POS 2000": 4
+    "CNC S TOUCH": 5
+    "": 0
+  weight: 1.5
+
+Clamping beams:
+  type: categorical
+  mapping:
+    "Combi (45°)": 4
+  weight: 0.5
+
+Clamping beam opening (mm):
+  type: numeric
+  pick: max
+  weight: 1.0
+
+Clamping beam motor (kW):
+  type: numeric
+  pick: max
+  weight: 1.0
+
+Clamping beam force (kN):
+  type: numeric
+  pick: max
+  weight: 1.0
+
+Folding beam motor (kW):
+  type: numeric
+  pick: max
+  weight: 1.0
+
+Folding beam accuracy:
+  type: numeric_inverse
+  pick: avg
+  weight: 1.0
+
+Folding beam adjustment (mm):
+  type: numeric
+  pick: max
+  weight: 0.8
+
+Maximum bending angle (deg):
+  type: numeric
+  pick: max
+  weight: 0.5
+
+Clamping beam special tool:
+  type: boolean
+  weight: 0.7
+
+Folding beam special tool:
+  type: boolean
+  weight: 0.7
+
+Smallest tool thickness (mm):
+  type: numeric_inverse
+  pick: min
+  weight: 0.5
+
+Options on tools like Xspace?:
+  type: boolean
+  weight: 0.4
+
+Hardened toolings for stainless steel:
+  type: boolean
+  weight: 0.4
+
+Backguage fingures type solid?:
+  type: boolean
+  weight: 0.6
+
+Backguage fingures type spring steel?:
+  type: boolean
+  weight: 0.4
+
+Gauge fingure range min?:
+  type: numeric
+  pick: min
+  weight: 0.6
+
+Gauge fingure range max?:
+  type: numeric
+  pick: max
+  weight: 0.8
+
+Xtap automated:
+  type: categorical
+  mapping:
+    "Yes": 3
+    "1000 to 4200": 2
+    "1500": 2
+    "": 0
+  weight: 0.8
+
+Xtap manual:
+  type: boolean
+  weight: 0.3
+
+Height adjustment?:
+  type: categorical
+  mapping:
+    "Yes": 2
+    "No": 0
+    "Option": 1
+  weight: 0.6
+
+Drive unit system:
+  type: categorical
+  mapping:
+    "Servo driven": 5
+    "Motorised": 3
+    "": 0
+  weight: 1.0
+
+No of Gauging fingures:
+  type: numeric
+  pick: max
+  weight: 0.6
+
+No of fingure rows:
+  type: numeric
+  pick: max
+  weight: 0.4
+
+Gauging accuracy:
+  type: numeric_inverse
+  pick: avg
+  weight: 0.8
+
+Gauging Speed range:
+  type: numeric_inverse
+  pick: min
+  weight: 0.6
+
+Crowning Manual:
+  type: boolean
+  weight: 0.5
+
+Crowning Automatic:
+  type: boolean
+  weight: 1.0
+
+3D of profile:
+  type: boolean
+  weight: 0.5
+
+3D of folding sequence:
+  type: boolean
+  weight: 0.5
+
+External program:
+  type: boolean
+  weight: 0.8
+
+Remote maintenance:
+  type: boolean
+  weight: 0.8
+
+CAM- connection:
+  type: boolean
+  weight: 0.4
+
+ERP/PPS interface:
+  type: boolean
+  weight: 0.4
+
+DXF file import:
+  type: boolean
+  weight: 0.9
+
+Use of barcode import:
+  type: boolean
+  weight: 0.4
+
+Coding with high temp + high humid:
+  type: boolean
+  weight: 0.3
+
+Option software:
+  type: boolean
+  weight: 0.4
+
+Maintenance interval (months):
+  type: numeric_inverse
+  pick: avg
+  weight: 0.5
+
+Warranty time (months):
+  type: numeric
+  pick: max
+  weight: 0.5

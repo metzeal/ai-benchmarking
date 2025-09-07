@@ -1,14 +1,17 @@
+# app.py
 import streamlit as st
 import pandas as pd
 import yaml
 import io
 import re
-from sklearn.preprocessing import MinMaxScaler
+import plotly.express as px
+import os
 
 st.set_page_config(page_title="Benchmarking (Category Summary)", layout="wide")
 
 # ------------------------- helpers -------------------------
 NUM_RE = re.compile(r"[-+]?\d*\.?\d+")
+
 
 def parse_numeric(cell, pick="max"):
     if pd.isna(cell):
@@ -21,57 +24,78 @@ def parse_numeric(cell, pick="max"):
     if pick == "min":
         return min(nums)
     if pick == "avg":
-        return sum(nums)/len(nums)
+        return sum(nums) / len(nums)
     return max(nums)
+
 
 def parse_boolean(cell):
     if pd.isna(cell):
         return 0
     s = str(cell).strip().lower()
-    if s in ("yes","y","true","1"):
+    if s in ("yes", "y", "true", "1"):
         return 1
-    if s in ("no","n","false","0"):
+    if s in ("no", "n", "false", "0"):
         return 0
-    return 0
+    return 0  # unknown -> treat as false/0
+
 
 def scale_dict(d, invert=False):
-    # d: product->value (numeric or None) -> returns product->0..100 scaled
-    vals = {k:v for k,v in d.items() if v is not None}
+    """
+    d: dict product->value (numeric or None)
+    Returns dict product->scaled value in 0..100
+    """
+    vals = {k: v for k, v in d.items() if v is not None}
     if not vals:
-        return {k:0.0 for k in d.keys()}
+        return {k: 0.0 for k in d.keys()}
     vmin = min(vals.values())
     vmax = max(vals.values())
     if abs(vmax - vmin) < 1e-12:
-        return {k:50.0 if d[k] is not None else 0.0 for k in d.keys()}
+        # all same value -> give 50 to existing, 0 to missing
+        return {k: (50.0 if d[k] is not None else 0.0) for k in d.keys()}
     out = {}
-    for k,v in d.items():
+    for k, v in d.items():
         if v is None:
-            out[k]=0.0
+            out[k] = 0.0
         else:
-            s = (v - vmin)/(vmax - vmin) * 100.0
+            s = (v - vmin) / (vmax - vmin) * 100.0
             out[k] = 100.0 - s if invert else s
     return out
+
 
 def load_yaml(cfg_file):
     if cfg_file is None:
         return {}
     try:
-        import yaml
-        return yaml.safe_load(cfg_file)
+        raw = cfg_file.read()
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        return yaml.safe_load(raw) or {}
     except Exception as e:
         st.error(f"Failed to parse YAML config: {e}")
         return {}
 
+
 # ------------------------- scoring -------------------------
 def compute_scores(df, cfg):
-    # df: DataFrame with columns Category, Criterion, <products...>
+    """
+    Input:
+      df - DataFrame with at least columns: Category, Criterion, <product columns...>
+      cfg - dict from YAML with rules per criterion
+    Returns:
+      detailed: DataFrame (Criterion x [Category + product columns]) with weighted raw scores (0..100 * weight)
+      cat_scores_0_10: DataFrame (Category rows x product columns), with integer 0..10 normalized, plus TOTAL and RANK rows
+      missing_rules: sorted list of criteria not found in cfg
+    """
+    # basic sanitization
+    df = df.copy()
+    if "Criterion" not in df.columns or "Category" not in df.columns:
+        raise ValueError("Specs sheet must contain 'Category' and 'Criterion' columns.")
+
     df["Criterion"] = df["Criterion"].astype(str).str.strip()
     df["Category"] = df["Category"].astype(str).str.strip()
-    products = [c for c in df.columns if c not in ("Category","Criterion")]
-    crit_rows = []
+    products = [c for c in df.columns if c not in ("Category", "Criterion")]
     missing_rules = set()
 
-    # store weighted scores (criterion x products)
     weighted = pd.DataFrame(index=df["Criterion"].values, columns=products)
 
     for _, row in df.iterrows():
@@ -79,52 +103,49 @@ def compute_scores(df, cfg):
         cfg_rule = cfg.get(crit)
         if not cfg_rule:
             missing_rules.add(crit)
-            # treat unknown as boolean with weight 0 (ignored)
+            # skip unknown criteria (ignored)
             continue
-        ctype = cfg_rule.get("type","numeric")
-        weight = float(cfg_rule.get("weight",1.0))
-        pick = cfg_rule.get("pick","max")
 
-        if ctype in ("numeric","numeric_inverse"):
+        ctype = cfg_rule.get("type", "numeric")
+        weight = float(cfg_rule.get("weight", 1.0))
+        pick = cfg_rule.get("pick", "max")
+
+        if ctype in ("numeric", "numeric_inverse"):
             parsed = {p: parse_numeric(row[p], pick=pick) for p in products}
-            invert = (ctype=="numeric_inverse") or bool(cfg_rule.get("invert",False))
+            invert = (ctype == "numeric_inverse") or bool(cfg_rule.get("invert", False))
             scaled = scale_dict(parsed, invert=invert)  # 0..100
             for p in products:
-                weighted.at[crit,p] = scaled.get(p,0.0) * weight
+                weighted.at[crit, p] = scaled.get(p, 0.0) * weight
 
-        elif ctype=="boolean":
+        elif ctype == "boolean":
             parsed = {p: parse_boolean(row[p]) for p in products}
             for p in products:
-                weighted.at[crit,p] = parsed.get(p,0.0) * 100.0 * weight
+                weighted.at[crit, p] = parsed.get(p, 0.0) * 100.0 * weight
 
-        elif ctype=="categorical":
-            mapping = cfg_rule.get("mapping",{})
+        elif ctype == "categorical":
+            mapping = cfg_rule.get("mapping", {})
             parsed = {p: float(mapping.get(str(row[p]).strip(), 0.0)) for p in products}
-            # if mapping given likely already numeric scores; normalize 0..100
             scaled = scale_dict(parsed, invert=False)
             for p in products:
-                weighted.at[crit,p] = scaled.get(p,0.0) * weight
+                weighted.at[crit, p] = scaled.get(p, 0.0) * weight
 
         else:
-            # fallback numeric
             parsed = {p: parse_numeric(row[p], pick=pick) for p in products}
             scaled = scale_dict(parsed, invert=False)
             for p in products:
-                weighted.at[crit,p] = scaled.get(p,0.0) * weight
+                weighted.at[crit, p] = scaled.get(p, 0.0) * weight
 
     weighted = weighted.fillna(0.0).astype(float)
-
-    # attach category mapping
     crit_to_cat = dict(zip(df["Criterion"], df["Category"]))
     weighted.index.name = "Criterion"
     weighted = weighted.reset_index()
-
-    # group by category: sum weighted scores per category per product
     weighted["Category"] = weighted["Criterion"].map(crit_to_cat)
-    products = [c for c in weighted.columns if c not in ("Criterion","Category")]
+
+    # group by category and sum weighted scores per product
+    products = [c for c in weighted.columns if c not in ("Criterion", "Category")]
     cat_group = weighted.groupby("Category")[products].sum()
 
-    # normalize each category to 0..10 integer scale (so summary shows small integers)
+    # convert each category row to 0..10 integer scale (relative within category)
     cat_scores_0_10 = cat_group.copy().astype(float)
     for cat in cat_scores_0_10.index:
         row = cat_scores_0_10.loc[cat]
@@ -134,28 +155,51 @@ def compute_scores(df, cfg):
         else:
             cat_scores_0_10.loc[cat] = (row / vmax * 10).round().astype(int)
 
-    # compute total as sum of category integers
+    # TOTAL and RANK
     cat_scores_0_10.loc["TOTAL"] = cat_scores_0_10.sum(numeric_only=True)
-    # compute rank by TOTAL descending
     totals = cat_scores_0_10.loc["TOTAL"]
-    ranks = totals.rank(ascending=False, method="dense").astype(int)
-    cat_scores_0_10.loc["RANK"] = ranks
+    cat_scores_0_10.loc["RANK"] = totals.rank(ascending=False, method="dense").astype(int)
 
-    # prepare detailed weighted (criterion x product) as DataFrame with Category column
     detailed = weighted.set_index("Criterion")
-    # reorder columns: Category first then products
-    detailed_cols = ["Category"] + [c for c in detailed.columns if c!="Category"]
+    detailed_cols = ["Category"] + [c for c in detailed.columns if c != "Category"]
     detailed = detailed[detailed_cols]
 
     return detailed, cat_scores_0_10, sorted(list(missing_rules))
 
-# ------------------------- Streamlit UI -------------------------
-st.title("Product Benchmarking — Category Summary Output")
 
-st.markdown("Upload a Specs Excel (sheet 'Specs' with columns: Category, Criterion, then product columns). Upload a YAML scoring_config to control logic.")
+# ------------------------- Streamlit UI -------------------------
+st.title("Product Benchmarking")
+st.markdown(
+    "Upload a Specs Excel (sheet named `Specs` with columns: Category, Criterion, then product columns). "
+    "Optionally upload a scoring_config.yaml to control scoring logic."
+)
+
+# Display and allow download of files in the templates folder
+st.sidebar.subheader("Projects")
+
+# List folders under the templates directory
+templates_dir = "templates"
+project_folders = [f for f in os.listdir(templates_dir) if os.path.isdir(os.path.join(templates_dir, f))]
+
+for project in project_folders:
+    st.sidebar.markdown(f"### {project}")
+    project_path = os.path.join(templates_dir, project)
+    project_files = [f for f in os.listdir(project_path) if os.path.isfile(os.path.join(project_path, f))]
+
+    for file_name in project_files:
+        file_path = os.path.join(project_path, file_name)
+        with open(file_path, "rb") as f:
+            st.sidebar.download_button(
+                label=f"Download {file_name}",
+                data=f,
+                file_name=file_name
+            )
 
 spec_file = st.file_uploader("Specs Excel (.xlsx)", type=["xlsx"])
-cfg_file = st.file_uploader("scoring_config.yaml (optional)", type=["yaml","yml"])
+cfg_file = st.file_uploader("scoring_config.yaml (optional)", type=["yaml", "yml"])
+
+# Ensure we always have a defined variable for specs
+specs = None
 
 if not spec_file:
     st.info("Please upload Specs Excel to proceed. Use the provided template if needed.")
@@ -163,30 +207,59 @@ if not spec_file:
 
 try:
     specs = pd.read_excel(spec_file, sheet_name="Specs")
+    if specs is None or specs.empty:
+        raise ValueError("Specs file is empty or invalid. Please upload a valid file with a 'Specs' sheet.")
 except Exception as e:
     st.error(f"Failed to read 'Specs' sheet: {e}")
+    st.stop()
+
+if "Category" not in specs.columns or "Criterion" not in specs.columns:
+    st.error("Specs sheet must contain 'Category' and 'Criterion' columns.")
     st.stop()
 
 st.subheader("Preview Specs (first rows)")
 st.dataframe(specs.head())
 
-cfg = load_yaml(cfg_file) if cfg_file else load_yaml(None)
-detailed, category_summary, missing = compute_scores(specs, cfg)
+# load YAML config
+cfg = load_yaml(cfg_file) if cfg_file else {}
 
-st.subheader("Criterion-level weighted scores (raw, 0..100 * weight)")
-st.dataframe(detailed)
+# Display the uploaded YAML config file content in an expandable section
+if cfg_file:
+    with st.expander("Uploaded Scoring Config"):
+        st.json(cfg)
 
-st.subheader("Category summary (0..10 per category scale, TOTAL and RANK)")
-st.dataframe(category_summary)
+# Add a "Run" button to trigger scoring
+if st.button("Run Scoring"):
+    with st.spinner("Processing data..."):
+        try:
+            detailed, category_summary, missing = compute_scores(specs, cfg)
+        except Exception as e:
+            st.error(f"Error computing scores: {e}")
+            st.stop()
+    st.success("Processing complete!")
 
-if missing:
-    st.warning("Missing rules in YAML for: " + ", ".join(missing))
+    tab1, tab2 = st.tabs(["Detailed Scores", "Category Summary"])
+    with tab1:
+        st.subheader("Criterion-level weighted scores (raw, 0..100 * weight)")
+        st.dataframe(detailed)
+    with tab2:
+        st.subheader("Category summary (0..10 per category scale, TOTAL and RANK)")
+        st.dataframe(category_summary)
 
-# allow download
-out = io.BytesIO()
-with pd.ExcelWriter(out, engine="openpyxl") as writer:
-    specs.to_excel(writer, sheet_name="Specs", index=False)
-    detailed.to_excel(writer, sheet_name="DetailedWeighted", index=True)
-    category_summary.to_excel(writer, sheet_name="CategorySummary", index=True)
-out.seek(0)
-st.download_button("Download results Excel", data=out.read(), file_name="benchmark_results.xlsx")
+    # Plot totals per product (from TOTAL row)
+    if "TOTAL" in category_summary.index:
+        totals = category_summary.loc["TOTAL"]
+        fig = px.bar(x=totals.index, y=totals.values, labels={"x": "Product", "y": "TOTAL score"}, title="TOTAL scores per product")
+        st.plotly_chart(fig, use_container_width=True)
+
+    if missing:
+        st.warning("Missing rules in YAML for: " + ", ".join(missing))
+
+    # Allow download
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        specs.to_excel(writer, sheet_name="Specs", index=False)
+        detailed.to_excel(writer, sheet_name="DetailedWeighted", index=True)
+        category_summary.to_excel(writer, sheet_name="CategorySummary", index=True)
+    out.seek(0)
+    st.download_button("Download results Excel", data=out.read(), file_name="benchmark_results.xlsx")
