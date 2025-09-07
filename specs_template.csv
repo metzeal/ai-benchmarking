@@ -1,0 +1,46 @@
+Category,Criterion,CIDAN FX,ERBEND MFD,RAS 2 PLUS,POWERBEND MULTI,SCHECHTL MAE
+GENERAL,Length (mm),"2,60,03,20,04,100","2,55,03,20,04,200","3,20,02,540","2,50,03,20,04,000","2,04,02,54,03,10,04,040"
+GENERAL,Capacity (mm),"2,2,2.5","1.5,2,2.5","2,2.5","1.75,2,2.5","4,3.5,3,2"
+GENERAL,Max sheet bending length (mm),"2,60,03,20,04,100","2,55,03,20,04,200","3,20,02,540","2,52,03,22,04,020","2,04,02,54,03,10,04,040"
+GENERAL,Weight (ton),"3.2,3.7,4.5","4.2,4.6,5.5","3.5,3.9,4.3,5.0",3.9,"3.5,3.9,4.3,5.0"
+GENERAL,Footprints (LxHxB mm),"3658,4258,5158 x 1055 x 1970",,,,
+GENERAL,Control system,Prolink or Easylink,,POS 2000,CNC S TOUCH,
+GEOMETRY,Clamping beams,Combi (45°),,,,
+GEOMETRY,Clamping beam opening (mm),150,,280,160,225
+GEOMETRY,Clamping beam motor (kW),1.5,,2x3.0,, 
+GEOMETRY,Clamping beam force (kN),"1,00,140",,,,
+GEOMETRY,Folding beam motor (kW),"1.5,2.2",,,2x2.2,
+GEOMETRY,Folding beam accuracy,"0.5,1",,,,
+GEOMETRY,Folding beam adjustment (mm),20,,80,,
+GEOMETRY,Maximum bending angle (deg),140,,,,140
+TOOLS,Clamping beam special tool,Yes,,Yes,Yes,Yes
+TOOLS,Folding beam special tool,Yes,,Yes,Yes,Yes
+TOOLS,Smallest tool thickness (mm),7,7,7,7,7
+TOOLS,Options on tools like Xspace?,Yes,,,, 
+TOOLS,Hardened toolings for stainless steel,Yes,,,, 
+BACKGAUGE,Backguage fingures type solid?,Yes,No,Yes,Yes,No
+BACKGAUGE,Backguage fingures type spring steel?,Yes,,,, 
+BACKGAUGE,Gauge fingure range min?,3,,6,10,6
+BACKGAUGE,Gauge fingure range max?,1550,1550,1000,1000,1500
+BACKGAUGE,Xtap automated,Yes,1000 to 4200,1500,,
+BACKGAUGE,Xtap manual,No,,,, 
+BACKGAUGE,Height adjustment?,Yes,No,Option,No,
+BACKGAUGE,Drive unit system,Servo driven,,Motorised,,
+BACKGAUGE,No of Gauging fingures,8,12,14,,
+BACKGAUGE,No of fingure rows,2,2,2,1,2
+BACKGAUGE,Gauging accuracy,0.1,,,, 
+BACKGAUGE,Gauging Speed range,01-Mar,,,, 
+CROWNING,Crowning Manual,Yes,Yes,No,Yes,Yes
+CROWNING,Crowning Automatic,No,No,Yes,No,Yes
+SOFTWARE,3D of profile,No,No,No,No,No
+SOFTWARE,3D of folding sequence,No,No,No,No,No
+SOFTWARE,External program,Yes,Unknown,Yes,Unknown,Yes
+SOFTWARE,Remote maintenance,Yes,Unknown,Yes,Unknown,Yes
+SOFTWARE,CAM- connection,No,No,No,No,No
+SOFTWARE,ERP/PPS interface,No,No,No,No,No
+SOFTWARE,DXF file import,Yes,Unknown,Yes,Yes,Yes
+SOFTWARE,Use of barcode import,Yes,Unknown,Unknown,Unknown,Unknown
+SOFTWARE,Coding with high temp + high humid,Yes,Unknown,No,Unknown,Unknown
+SOFTWARE,Option software,nuIT,No,No,No,No
+MAINTENANCE,Maintenance interval (months),12,18,12,6,12
+MAINTENANCE,Warranty time (months),24,12,36,12,24
