@@ -40,17 +40,12 @@ def parse_boolean(cell):
 
 
 def scale_dict(d, invert=False):
-    """
-    d: dict product->value (numeric or None)
-    Returns dict product->scaled value in 0..100
-    """
     vals = {k: v for k, v in d.items() if v is not None}
     if not vals:
         return {k: 0.0 for k in d.keys()}
     vmin = min(vals.values())
     vmax = max(vals.values())
     if abs(vmax - vmin) < 1e-12:
-        # all same value -> give 50 to existing, 0 to missing
         return {k: (50.0 if d[k] is not None else 0.0) for k in d.keys()}
     out = {}
     for k, v in d.items():
@@ -77,20 +72,10 @@ def load_yaml(cfg_file):
 
 # ------------------------- scoring -------------------------
 def compute_scores(df, cfg):
-    """
-    Input:
-      df - DataFrame with at least columns: Category, Criterion, <product columns...>
-      cfg - dict from YAML with rules per criterion
-    Returns:
-      detailed: DataFrame (Criterion x [Category + product columns]) with weighted raw scores (0..100 * weight)
-      cat_scores_0_10: DataFrame (Category rows x product columns), with integer 0..10 normalized, plus TOTAL and RANK rows
-      missing_rules: sorted list of criteria not found in cfg
-    """
-    # basic sanitization
-    df = df.copy()
     if "Criterion" not in df.columns or "Category" not in df.columns:
         raise ValueError("Specs sheet must contain 'Category' and 'Criterion' columns.")
 
+    df = df.copy()
     df["Criterion"] = df["Criterion"].astype(str).str.strip()
     df["Category"] = df["Category"].astype(str).str.strip()
     products = [c for c in df.columns if c not in ("Category", "Criterion")]
@@ -103,7 +88,6 @@ def compute_scores(df, cfg):
         cfg_rule = cfg.get(crit)
         if not cfg_rule:
             missing_rules.add(crit)
-            # skip unknown criteria (ignored)
             continue
 
         ctype = cfg_rule.get("type", "numeric")
@@ -113,7 +97,7 @@ def compute_scores(df, cfg):
         if ctype in ("numeric", "numeric_inverse"):
             parsed = {p: parse_numeric(row[p], pick=pick) for p in products}
             invert = (ctype == "numeric_inverse") or bool(cfg_rule.get("invert", False))
-            scaled = scale_dict(parsed, invert=invert)  # 0..100
+            scaled = scale_dict(parsed, invert=invert)
             for p in products:
                 weighted.at[crit, p] = scaled.get(p, 0.0) * weight
 
@@ -141,11 +125,9 @@ def compute_scores(df, cfg):
     weighted = weighted.reset_index()
     weighted["Category"] = weighted["Criterion"].map(crit_to_cat)
 
-    # group by category and sum weighted scores per product
     products = [c for c in weighted.columns if c not in ("Criterion", "Category")]
     cat_group = weighted.groupby("Category")[products].sum()
 
-    # convert each category row to 0..10 integer scale (relative within category)
     cat_scores_0_10 = cat_group.copy().astype(float)
     for cat in cat_scores_0_10.index:
         row = cat_scores_0_10.loc[cat]
@@ -155,7 +137,6 @@ def compute_scores(df, cfg):
         else:
             cat_scores_0_10.loc[cat] = (row / vmax * 10).round().astype(int)
 
-    # TOTAL and RANK
     cat_scores_0_10.loc["TOTAL"] = cat_scores_0_10.sum(numeric_only=True)
     totals = cat_scores_0_10.loc["TOTAL"]
     cat_scores_0_10.loc["RANK"] = totals.rank(ascending=False, method="dense").astype(int)
@@ -174,41 +155,33 @@ st.markdown(
     "Optionally upload a scoring_config.yaml to control scoring logic."
 )
 
-# Display and allow download of files in the templates folder
+# Sidebar projects section
 st.sidebar.subheader("Projects")
-
-# List folders under the templates directory
 templates_dir = "templates"
-project_folders = [f for f in os.listdir(templates_dir) if os.path.isdir(os.path.join(templates_dir, f))]
-
-for project in project_folders:
-    st.sidebar.markdown(f"### {project}")
-    project_path = os.path.join(templates_dir, project)
-    project_files = [f for f in os.listdir(project_path) if os.path.isfile(os.path.join(project_path, f))]
-
-    for file_name in project_files:
-        file_path = os.path.join(project_path, file_name)
-        with open(file_path, "rb") as f:
-            st.sidebar.download_button(
-                label=f"Download {file_name}",
-                data=f,
-                file_name=file_name
-            )
+if os.path.exists(templates_dir):
+    project_folders = [f for f in os.listdir(templates_dir) if os.path.isdir(os.path.join(templates_dir, f))]
+    for project in project_folders:
+        st.sidebar.markdown(f"### {project}")
+        project_path = os.path.join(templates_dir, project)
+        project_files = [f for f in os.listdir(project_path) if os.path.isfile(os.path.join(project_path, f))]
+        for file_name in project_files:
+            file_path = os.path.join(project_path, file_name)
+            with open(file_path, "rb") as f:
+                st.sidebar.download_button(
+                    label=f"Download {file_name}",
+                    data=f,
+                    file_name=file_name
+                )
 
 spec_file = st.file_uploader("Specs Excel (.xlsx)", type=["xlsx"])
 cfg_file = st.file_uploader("scoring_config.yaml (optional)", type=["yaml", "yml"])
 
-# Ensure we always have a defined variable for specs
-specs = None
-
 if not spec_file:
-    st.info("Please upload Specs Excel to proceed. Use the provided template if needed.")
+    st.info("Please upload Specs Excel to proceed.")
     st.stop()
 
 try:
     specs = pd.read_excel(spec_file, sheet_name="Specs")
-    if specs is None or specs.empty:
-        raise ValueError("Specs file is empty or invalid. Please upload a valid file with a 'Specs' sheet.")
 except Exception as e:
     st.error(f"Failed to read 'Specs' sheet: {e}")
     st.stop()
@@ -217,49 +190,86 @@ if "Category" not in specs.columns or "Criterion" not in specs.columns:
     st.error("Specs sheet must contain 'Category' and 'Criterion' columns.")
     st.stop()
 
+# Preview table - always show unfiltered data
 st.subheader("Preview Specs (first rows)")
-st.dataframe(specs.head())
+st.dataframe(specs.head())  # Use the original specs DataFrame for the preview
 
-# load YAML config
+# Load YAML config
 cfg = load_yaml(cfg_file) if cfg_file else {}
-
-# Display the uploaded YAML config file content in an expandable section
 if cfg_file:
     with st.expander("Uploaded Scoring Config"):
         st.json(cfg)
 
-# Add a "Run" button to trigger scoring
+# Initialize session states
+if 'detailed' not in st.session_state:
+    st.session_state.detailed = None
+if 'category_summary' not in st.session_state:
+    st.session_state.category_summary = None
+
+# Run Scoring
 if st.button("Run Scoring"):
     with st.spinner("Processing data..."):
         try:
             detailed, category_summary, missing = compute_scores(specs, cfg)
+            # Store the computed data in session state
+            st.session_state.detailed = detailed
+            st.session_state.category_summary = category_summary
+            st.success("Processing complete!")
         except Exception as e:
             st.error(f"Error computing scores: {e}")
             st.stop()
-    st.success("Processing complete!")
 
+# Add category filter and display results if data exists
+if st.session_state.detailed is not None:
+    # Add category filter in the side panel
+    st.sidebar.subheader("Filter by Category")
+    categories = sorted(st.session_state.detailed["Category"].unique().tolist())
+    
+    # Create multiselect for categories using the session state directly
+    selected_cats = st.sidebar.multiselect(
+        "Select Categories",
+        options=categories,
+        default=categories,  # Default to all categories
+        help="Select categories to filter the results. If none selected, all categories will be shown."
+    )
+
+    # Initialize filtered dataframes with all data
+    filtered_detailed = st.session_state.detailed.copy()
+    filtered_summary = st.session_state.category_summary.copy()
+
+    # Apply filter only if specific categories are selected
+    if selected_cats:
+        filtered_detailed = filtered_detailed[filtered_detailed["Category"].isin(selected_cats)]
+        # Keep 'TOTAL' and 'RANK' rows when filtering
+        filter_cats = selected_cats + ['TOTAL', 'RANK']
+        filtered_summary = filtered_summary.loc[filtered_summary.index.isin(filter_cats)]
+
+    # Display the tabs with filtered data
     tab1, tab2 = st.tabs(["Detailed Scores", "Category Summary"])
     with tab1:
-        st.subheader("Criterion-level weighted scores (raw, 0..100 * weight)")
-        st.dataframe(detailed)
+        st.subheader("Criterion-level weighted scores")
+        st.dataframe(filtered_detailed)
     with tab2:
-        st.subheader("Category summary (0..10 per category scale, TOTAL and RANK)")
-        st.dataframe(category_summary)
+        st.subheader("Category summary")
+        st.dataframe(filtered_summary)
 
-    # Plot totals per product (from TOTAL row)
-    if "TOTAL" in category_summary.index:
-        totals = category_summary.loc["TOTAL"]
-        fig = px.bar(x=totals.index, y=totals.values, labels={"x": "Product", "y": "TOTAL score"}, title="TOTAL scores per product")
-        st.plotly_chart(fig, use_container_width=True)
+        # Show plot in the Category Summary tab
+        if "TOTAL" in filtered_summary.index:
+            totals = filtered_summary.loc["TOTAL"]
+            fig = px.bar(x=totals.index, y=totals.values,
+                        labels={"x": "Product", "y": "TOTAL score"},
+                        title="TOTAL scores per product")
+            st.plotly_chart(fig, use_container_width=True)
 
-    if missing:
-        st.warning("Missing rules in YAML for: " + ", ".join(missing))
+    # Show missing rules warning
+    if hasattr(st.session_state, 'missing_rules') and st.session_state.missing_rules:
+        st.warning("Missing rules in YAML for: " + ", ".join(st.session_state.missing_rules))
 
-    # Allow download
+    # Add download button for results
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
         specs.to_excel(writer, sheet_name="Specs", index=False)
-        detailed.to_excel(writer, sheet_name="DetailedWeighted", index=True)
-        category_summary.to_excel(writer, sheet_name="CategorySummary", index=True)
+        filtered_detailed.to_excel(writer, sheet_name="DetailedWeighted", index=True)
+        filtered_summary.to_excel(writer, sheet_name="CategorySummary", index=True)
     out.seek(0)
     st.download_button("Download results Excel", data=out.read(), file_name="benchmark_results.xlsx")
